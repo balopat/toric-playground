@@ -1,0 +1,288 @@
+<!--Copyright 2020 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+--> 
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Toric code playrgound</title>
+    <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+</head>
+
+<body>
+
+    <script type="text/javascript">
+        class Generator {
+            constructor(col, row, svgs) {
+                this.svgs = svgs
+                this.col = col
+                this.row = row
+                // array of max 4, t,l,b,r
+                this.qubits = [null, null, null, null]
+                this.state = false
+            }
+
+
+            top(q) {
+                if (typeof q !== 'undefined') {
+                    this.qubits[0] = q
+                    q.addGenerator(this)
+                }
+                return this.qubits[0]
+            }
+
+            left(q) {
+                if (typeof q !== 'undefined') {
+                    this.qubits[1] = q
+                    q.addGenerator(this)
+                }
+                return this.qubits[1]
+            }
+
+            bottom(q) {
+                if (typeof q !== 'undefined') {
+                    this.qubits[2] = q
+                    q.addGenerator(this)
+                }
+                return this.qubits[2]
+            }
+
+            right(q) {
+                if (typeof q !== 'undefined') {
+                    this.qubits[3] = q
+                    q.addGenerator(this)
+                }
+                return this.qubits[3]
+            }
+
+        }
+
+        class Plaquette extends Generator {
+            update() {
+                var zErrors = 0
+                for (const i in this.qubits) {
+                    const q = this.qubits[i]
+                    if (!q) {
+                        console.log("null qubit in " + this)
+                        continue
+                    }
+                    if (q.state == 1 || q.state == 3) {
+                        zErrors++
+                    }
+                }
+                this.state = zErrors % 2 == 1
+                if (this.state) {
+                    this.svgs[0].fill("darkgray")
+                } else {
+                    this.svgs[0].fill("white")
+                }
+                console.log(this.type + " update " + this)
+            }
+        }
+
+        class Vertex extends Generator {
+            update() {
+                var xErrors = 0
+                for (const i in this.qubits) {
+                    const q = this.qubits[i]
+                    if (!q) {
+                        console.log("null qubit in " + this)
+                        continue
+                    }
+                    if (q.state == 2 || q.state == 3) {
+                        xErrors++
+                    }
+                }
+                this.state = xErrors % 2 == 1
+                for (const i in this.svgs) {
+                    const s = this.svgs[i]
+                    if (this.state) {
+                        s.fill("red")
+                    } else {
+                        s.fill("transparent")
+                    }
+                }
+
+                console.log(this.type + " update " + this)
+            }
+        }
+
+        class Qubit {
+            colors = ["white", "red", "green", "blue"]
+            labels = ["", "Z", "X", "Y"]
+
+            constructor() {
+                this.svgs = []
+                this.generators = []
+                this.state = 0
+                const q = this
+            }
+            addSvg(svg) {
+                this.svgs.push(svg)
+                const q = this
+                svg.click(function (e) {
+                    q.click(e.shiftKey)
+                })
+            }
+            addGenerator(p) {
+                this.generators.push(p)
+            }
+            click(shift) {
+                this.state = (this.state + (shift ? -1 : 1) + 4) % 4
+                console.log(this.state)
+                for (const s in this.svgs) {
+                    this.svgs[s].fill(this.colors[this.state])
+                    // this.svgs[s].text(this.labels[this.state])
+                }
+                console.log(this.generators)
+                for (const p in this.generators) {
+
+                    this.generators[p].update()
+                }
+            }
+        }
+        var draw = SVG().addTo('body').size(800, 600)
+
+        offset = { x: 10, y: 10 }
+        cellWidth = 50
+        gridSize = 5
+        radius = 7.5
+
+        //qubits sit on the edges         
+        // can exist in X/Z/Y/I states for now 
+        qubits = []
+
+        // measure Z errors 
+        const vertices = []
+
+        // measure X errors 
+        plaqs = []
+
+        for (i = 0; i < gridSize; i++) {
+            plaqs[i] = []
+
+            for (j = 0; j < gridSize; j++) {
+                var rect = draw.rect(cellWidth, cellWidth).attr({
+                    x: i * cellWidth + offset.x,
+                    y: j * cellWidth + offset.y,
+                    stroke: '#000000', fill: '#ffffff'
+                })
+                p = new Plaquette(i, j, [rect])
+                qt = new Qubit()
+                rect.qtop = qt
+
+                ql = new Qubit()
+                rect.qleft = ql
+
+                p.top(qt)
+                p.left(ql)
+
+                plaqs[i].push(p)
+                var c_t = draw.circle(radius * 2).stroke("black").fill("white").x(rect.x() + cellWidth / 2 - radius).y(rect.y() - radius)
+                if (j == 0) {
+                    c_t.attr({ "stroke-dasharray": 2 })
+                    p.topBoundary = true
+                } else {
+                    plaqs[i][j - 1].bottom(qt)
+                }
+                qt.addSvg(c_t)
+
+                var c_l = draw.circle(radius * 2).stroke("black").fill("white").x(rect.x() - radius).y(rect.y() + cellWidth / 2 - radius)
+                if (i == 0) {
+                    c_l.attr({ "stroke-dasharray": 2 })
+                    p.leftBoundary = true
+                } else {
+                    plaqs[i - 1][j].right(ql)
+                }
+                ql.addSvg(c_l)
+
+                if (i == gridSize - 1) {
+                    p.rightBoundary = true
+                    var c_r = draw.circle(radius * 2).stroke("black").fill("white")
+                    c_r.x(rect.x() + cellWidth - radius).y(rect.y() + cellWidth / 2 - radius)
+                    c_r.attr({ "stroke-dasharray": 2 })
+                    plaqs[0][j].left().addSvg(c_r)
+                    p.right(plaqs[0][j].left())
+
+                    // setting up the dual for the left column
+                    if (j > 0) {
+                        r = plaqs[0][j].svgs[0]
+                        var v_tl = draw.text("X").x(r.x() - 5).y(r.y() - 8).fill("transparent")
+                        var v_tr = draw.text("X").x(rect.x() - 5 + cellWidth).y(rect.y() - 8).fill("transparent")
+
+                        dual = new Vertex(0,j, [v_tl, v_tr])
+                        vertices.push(dual)
+                        dual.top(plaqs[i][j-1].right())
+                        dual.left(plaqs[i][j-1].bottom())
+                        dual.bottom(plaqs[0][j].left())
+                        dual.right(plaqs[0][j].top())
+                    }
+                }
+
+                if (j == gridSize - 1) {
+                    p.bottomBoundary = true
+                    c_b = draw.circle(radius * 2).stroke("black").fill("white")
+                    c_b.x(rect.x() + cellWidth / 2 - radius).y(rect.y() + cellWidth - radius)
+                    c_b.attr({ "stroke-dasharray": 2 })
+                    plaqs[i][0].top().addSvg(c_b)
+                    p.bottom(plaqs[i][0].top())
+
+                    // setting up the dual for the top row 
+                    if (i > 0) {
+                        r = plaqs[i][0].svgs[0]
+                        var v_tl = draw.text("X").x(r.x() - 5).y(r.y() - 8).fill("transparent")
+                        var v_bl = draw.text("X").x(rect.x() - 5).y(rect.y() - 8 + cellWidth).fill("transparent")
+
+                        dual = new Vertex(i, 0, [v_tl, v_bl])
+                        vertices.push(dual)
+                        dual.top(plaqs[i - 1][j].right())
+                        dual.left(plaqs[i - 1][j].bottom())
+                        dual.bottom(plaqs[i][0].top())
+                        dual.right(plaqs[i][0].left())
+                    }
+                }
+
+                if (i > 0 && j > 0) {
+                    var v_tl = draw.text("X").x(rect.x() - 5).y(rect.y() - 8).fill("transparent")
+                    dual = new Vertex(i, j, [v_tl])
+                    vertices.push(dual)
+                    dual.top(plaqs[i - 1][j - 1].right())
+                    dual.left(plaqs[i - 1][j - 1].bottom())
+                    dual.bottom(p.top())
+                    dual.right(p.left())
+                }
+
+                if (i == gridSize - 1 && j == gridSize - 1) {
+                    r = plaqs[0][0].svgs[0]
+                    var v_tl = draw.text("X").x(r.x() - 5).y(r.y() - 8).fill("transparent")
+                    var v_br = draw.text("X").x(rect.x() - 5 + cellWidth).y(rect.y() - 8 + cellWidth).fill("transparent")
+                    var v_tr = draw.text("X").x(rect.x() - 5 + cellWidth).y(r.y() - 8).fill("transparent")
+                    var v_bl = draw.text("X").x(r.x() - 5).y(rect.y() + cellWidth - 8).fill("transparent")
+
+                    dual = new Vertex(0, 0, [v_tl, v_bl, v_br, v_tr])
+                    vertices.push(dual)
+                    dual.top(p.right())
+                    dual.left(p.bottom())
+                    dual.bottom(plaqs[0][0].left())
+                    dual.right(plaqs[0][0].top())
+                }
+
+
+            }
+        }
+
+    </script>
+</body>
+</html>
