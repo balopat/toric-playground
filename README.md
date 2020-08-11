@@ -4,3 +4,4 @@ This is a tiny project that I wrote in 2 hours to just play with the toric code 
 
 ![](./preview.gif)
 
+Try it out [here](https://raw.githack.com/balopat/toric-playground/master/index.html)
